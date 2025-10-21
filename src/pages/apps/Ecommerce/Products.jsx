@@ -199,11 +199,11 @@ const Products = () => {
                 <Card className="product-box h-100">
                   <Card.Body className="d-flex flex-column">
                     <div className="product-action">
-                      <Button variant="success" size="xs" className="waves-effect waves-light me-1"
-                        onClick={() => navigate(`/apps/ecommerce/edit-product/${product.product_id}`)}
+{/*                       <Button variant="success" size="xs" className="waves-effect waves-light me-1"
+                        onClick={() => navigate(`/apps/ecommerce/edit-product`)}
                       >
                         <i className="mdi mdi-pencil"></i>
-                      </Button>
+                      </Button> */}
                       <Button variant="danger" size="xs" className="waves-effect waves-light"
                         onClick={() => deleteProduct(product.product_id)}
                       >

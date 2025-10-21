@@ -12,7 +12,7 @@ const BottomLink = () => {
   } = useTranslation();
   return <footer className="footer footer-alt">
       <p className="text-muted">
-        {t("2018 - " + new Date().getFullYear() + " © UBold theme by")}{" "}
+        {t("2018 - " + new Date().getFullYear() + " © BTR Communication")}{" "}
         <Link to="#" className="text-muted">
           {t("Coderthemes")}
         </Link>

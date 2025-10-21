@@ -106,7 +106,7 @@ const Upcoming = () => {
       </div>
 
       <footer className="footer footer-alt">
-        2015 - {new Date().getFullYear()} &copy; UBold theme by{" "}
+        2015 - {new Date().getFullYear()} &copy; BTR Communication{" "}
         <Link to="#" className="text-white-50">
           Coderthemes
         </Link>

@@ -44,7 +44,16 @@ const MENU_ITEMS = [{
     label: "Add Product",
     url: "/apps/ecommerce/edit-product",
     parentKey: "apps-ecommerce"
-  }, {
+  },
+  {
+    key: "ecommerce-banner",
+    label: "Banner",
+    url: "/apps/ecommerce/banner",
+    parentKey: "apps-ecommerce"
+  },
+  
+  
+  {
     key: "ecommerce-customers",
     label: "Customers",
     url: "/apps/ecommerce/customers",

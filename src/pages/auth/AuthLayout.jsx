@@ -25,9 +25,10 @@ const AuthLayout = ({
                   <div className="text-center w-75 m-auto">
                     <div className="auth-brand">
                       <Link to="/" className="logo logo-dark text-center">
-                        <span className="logo-lg">
+                      <p style={{fontSize:16, color:'black', fontWeight:'bold'}}>Ecommerce Admin Portal</p>
+                        {/* <span className="logo-lg">
                           <img src={LogoDark} alt="" height="22" />
-                        </span>
+                        </span> */}
                       </Link>
 
                       <Link to="/" className="logo logo-light text-center">
@@ -50,7 +51,7 @@ const AuthLayout = ({
       </div>
 
       <footer className="footer footer-alt">
-        2015 - {new Date().getFullYear()} &copy; UBold theme by{" "}
+        2015 - {new Date().getFullYear()} &copy; BTR Communication{" "}
         <Link to="#" className="text-white-50">
           Coderthemes
         </Link>

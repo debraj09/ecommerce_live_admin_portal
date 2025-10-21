@@ -46,6 +46,7 @@ const EcommerceDashboard = React.lazy(() => import("../pages/apps/Ecommerce/Dash
 const EcommerceProducts = React.lazy(() => import("../pages/apps/Ecommerce/Products"));
 const ProductDetails = React.lazy(() => import("../pages/apps/Ecommerce/ProductDetails"));
 const ProductEdit = React.lazy(() => import("../pages/apps/Ecommerce/ProductEdit"));
+const BannerAdd = React.lazy(() => import("../pages/apps/Ecommerce/bannerAdd"));
 const Customers = React.lazy(() => import("../pages/apps/Ecommerce/Customers"));
 const Orders = React.lazy(() => import("../pages/apps/Ecommerce/Orders"));
 const OrderDetails = React.lazy(() => import("../pages/apps/Ecommerce/OrderDetails"));
@@ -240,7 +241,16 @@ const ecommerceAppRoutes = {
     name: "Product Edit",
     element: <ProductEdit />,
     route: PrivateRoute
-  }, {
+  }, 
+   {
+    path: "/apps/ecommerce/banner",
+    name: "Banner",
+    element: <BannerAdd />,
+    route: PrivateRoute
+  }, 
+  
+  
+  {
     path: "/apps/ecommerce/customers",
     name: "Customers",
     element: <Customers />,

@@ -351,9 +351,9 @@ const ProductAdd = () => {
                     </Col>
                 </Row>
             </form>
-            <div style={{marginTop:20}}>
+            {/* <div style={{marginTop:20}}>
                 <BannerAdd/>
-            </div>
+            </div> */}
         </div>
     );
 };

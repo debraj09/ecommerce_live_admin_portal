@@ -52,7 +52,7 @@ const Error500Two = () => {
 
               <footer className="footer footer-alt">
                 <p className="text-muted">
-                  2015 - {new Date().getFullYear()} &copy; UBold theme by{" "}
+                  2015 - {new Date().getFullYear()} &copy; BTR Communication{" "}
                   <Link to="#" className="text-muted">
                     Coderthemes
                   </Link>
