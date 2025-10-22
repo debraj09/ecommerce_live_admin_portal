@@ -237,19 +237,19 @@ const ecommerceAppRoutes = {
     element: <ProductDetails />,
     route: PrivateRoute
   }, {
-    path: "/apps/ecommerce/edit-product",
+    path:"/apps/ecommerce/edit-product/:productId",
     name: "Product Edit",
     element: <ProductEdit />,
     route: PrivateRoute
-  }, 
-   {
+  },
+  {
     path: "/apps/ecommerce/banner",
     name: "Banner",
     element: <BannerAdd />,
     route: PrivateRoute
-  }, 
-  
-  
+  },
+
+
   {
     path: "/apps/ecommerce/customers",
     name: "Customers",
