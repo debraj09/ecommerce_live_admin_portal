@@ -47,6 +47,7 @@ const EcommerceProducts = React.lazy(() => import("../pages/apps/Ecommerce/Produ
 const ProductDetails = React.lazy(() => import("../pages/apps/Ecommerce/ProductDetails"));
 const ProductEdit = React.lazy(() => import("../pages/apps/Ecommerce/ProductEdit"));
 const BannerAdd = React.lazy(() => import("../pages/apps/Ecommerce/bannerAdd"));
+const CategoryManagement = React.lazy(() => import("../pages/apps/Ecommerce/CategoryManagement"));
 const Customers = React.lazy(() => import("../pages/apps/Ecommerce/Customers"));
 const Orders = React.lazy(() => import("../pages/apps/Ecommerce/Orders"));
 const OrderDetails = React.lazy(() => import("../pages/apps/Ecommerce/OrderDetails"));
@@ -236,16 +237,24 @@ const ecommerceAppRoutes = {
     name: "Product Details",
     element: <ProductDetails />,
     route: PrivateRoute
-  }, {
-    path:"/apps/ecommerce/edit-product/:productId",
-    name: "Product Edit",
+  }, // This is an older/less common way to define optional params, 
+// and may not work in all setups, especially with specific route wrappers.
+{
+    path: "/apps/ecommerce/edit-product/:productId?", // The '?' makes the parameter optional
+    name: "Product Form",
     element: <ProductEdit />,
     route: PrivateRoute
-  },
+},
   {
     path: "/apps/ecommerce/banner",
     name: "Banner",
     element: <BannerAdd />,
+    route: PrivateRoute
+  },
+  {
+    path: "/apps/ecommerce/category",
+    name: "Category",
+    element: <CategoryManagement />,
     route: PrivateRoute
   },
 
