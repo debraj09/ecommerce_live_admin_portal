@@ -8,6 +8,7 @@ import { FaEdit, FaTrash, FaPlus, FaTimes, FaTags } from 'react-icons/fa';
 // Define the base URL for the API
 const API_BASE_URL = "https://ecomm.braventra.in/api"; 
 const VARIATION_API_URL = `${API_BASE_URL}/variations`;
+const PRODUCT_API_URL = `${API_BASE_URL}/products`; // Assuming this exists to fetch product names
 
 // ====================================================================
 // FormInput Helper Component (Re-used for consistency)
@@ -71,10 +72,10 @@ const Variation = () => {
         ).min(1, "At least one attribute is required"),
     });
 
-    // --- Edit Validation Schema (for single attribute) ---
+    // --- Edit Validation Schema ---
     const editSchema = yup.object().shape({
-        variation_type: yup.string().max(50),
-        variation_value: yup.string().max(50),
+        variation_type: yup.string().max(50).nullable(true),
+        variation_value: yup.string().max(50).nullable(true),
         price_modifier: yup.number().typeError("Modifier must be a number").min(0, "Cannot be negative").nullable(true),
     });
 
@@ -90,17 +91,19 @@ const Variation = () => {
     });
     
     // ====================================================================
-    // Data Fetching Functions (Using fetch)
+    // Data Fetching Functions
     // ====================================================================
 
     // Fetch all products for the main dropdown
     const fetchProducts = async () => {
         setIsProductsLoading(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/products`);
+            // NOTE: Assuming your /api/products returns data.data.products or data.products
+            const response = await fetch(PRODUCT_API_URL);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const data = await response.json();
-            setProducts(data.data && data.data.products ? data.data.products : []);
+            // Adjust this line based on your actual product API response structure
+            setProducts(data.data && data.data.products ? data.data.products : data.data || []); 
         } catch (err) {
             console.error("Error fetching products:", err);
             setSubmitStatus({ message: `Failed to fetch products: ${err.message}`, variant: 'danger' });
@@ -125,7 +128,7 @@ const Variation = () => {
                 throw new Error(errorData.error || `Server returned status ${response.status}`);
             }
             const data = await response.json();
-            // Assuming the API returns a structured array of variants
+            // The backend groups the data by SKU and returns an array in data.data
             setVariants(data.data || []);
         } catch (err) {
             console.error("Error fetching variations:", err);
@@ -156,6 +159,7 @@ const Variation = () => {
     // ====================================================================
 
     const openCreateModal = () => {
+        // Use the currently selected product ID as the default for convenience
         createForm.reset({ product_id: selectedProductId || '', sku: '', price_modifier: 0, attributes: [{ type: 'Size', value: '' }] });
         setCreateModalShow(true);
     };
@@ -168,16 +172,17 @@ const Variation = () => {
     const openEditModal = (attributeRow, parentVariant) => {
         setCurrentAttribute({
             ...attributeRow, 
-            price_modifier: parentVariant.price_modifier 
+            sku: parentVariant.sku,
+            product_id: parentVariant.product_id,
+            price_modifier: parentVariant.price_modifier // Pass the SKU-level modifier
         });
         
         editForm.reset({
             variation_type: attributeRow.variation_type,
             variation_value: attributeRow.variation_value,
-            // Check if this attribute row is the one that holds the price modifier data
-            price_modifier: attributeRow.id === parentVariant.attributes[0].id 
-                            ? parentVariant.price_modifier 
-                            : null 
+            // Only set price_modifier if this attribute row is the one that holds the price modifier data
+            // We'll use the price_modifier from the parentVariant object for the form display
+            price_modifier: parentVariant.price_modifier
         });
         setEditModalShow(true);
     };
@@ -189,7 +194,7 @@ const Variation = () => {
     };
 
     // ====================================================================
-    // CRUD Submission Handlers (Using fetch)
+    // CRUD Submission Handlers
     // ====================================================================
 
     // Handle Variant Creation 
@@ -200,7 +205,8 @@ const Variation = () => {
         const payload = {
             product_id: parseInt(data.product_id),
             sku: data.sku,
-            price_modifier: parseFloat(data.price_modifier),
+            // Ensure modifier is a number (or string) before sending, though backend handles parseFloat
+            price_modifier: parseFloat(data.price_modifier), 
             attributes: data.attributes.filter(attr => attr.type && attr.value)
         };
 
@@ -219,7 +225,8 @@ const Variation = () => {
             }
 
             setSubmitStatus({ message: responseData.message || 'New variant created successfully!', variant: 'success' });
-            fetchVariations(selectedProductId);
+            // Select the new product ID to auto-refresh the table
+            setSelectedProductId(String(data.product_id)); 
             handleCreateModalClose();
 
         } catch (error) {
@@ -236,11 +243,18 @@ const Variation = () => {
         setSubmitStatus({ message: '', variant: '' });
 
         const payload = {};
-        if (data.variation_type !== undefined) payload.variation_type = data.variation_type;
-        if (data.variation_value !== undefined) payload.variation_value = data.variation_value;
-        // Only include price_modifier if it was present/editable in the form
-        if (currentAttribute.price_modifier !== null) {
-            payload.price_modifier = data.price_modifier;
+        if (data.variation_type !== currentAttribute.variation_type && data.variation_type !== undefined) {
+            payload.variation_type = data.variation_type;
+        }
+        if (data.variation_value !== currentAttribute.variation_value && data.variation_value !== undefined) {
+            payload.variation_value = data.variation_value;
+        }
+        // Price modifier update logic: The price_modifier field is updated 
+        // on the specific attribute row that held it originally. 
+        // Since we are showing it in the modal, we send it regardless if it was changed.
+        // We ensure it's sent as a number/null.
+        if (data.price_modifier !== undefined) {
+             payload.price_modifier = data.price_modifier;
         }
 
         if (Object.keys(payload).length === 0) {
@@ -264,7 +278,8 @@ const Variation = () => {
             }
 
             setSubmitStatus({ message: responseData.message || 'Attribute updated successfully!', variant: 'success' });
-            fetchVariations(selectedProductId);
+            // Refresh variants for the currently selected product
+            fetchVariations(selectedProductId); 
             handleEditModalClose();
 
         } catch (error) {
@@ -449,16 +464,18 @@ const Variation = () => {
                         </Col>
                     </Row>
                     
-                    {/* Only show Price Modifier if this is the 'base' attribute row for the SKU */}
-                    {currentAttribute && currentAttribute.id === currentAttribute.attributes?.[0]?.id && (
+                    {/* Display Price Modifier for editing if the current row holds the modifier value */}
+                    {/* The backend logic typically stores the modifier on one primary row per SKU */}
+                    {currentAttribute && (
                         <FormInput
                             name="price_modifier"
-                            label="Price Modifier (Edit SKU Base Modifier)"
+                            label="Price Modifier (SKU Base Modifier)"
                             type="number"
                             placeholder="e.g. 5.00"
                             containerClass="mb-4"
                             register={editForm.register}
                             errors={editForm.formState.errors}
+                            // The backend handles the update logic, so we let the user edit it.
                         />
                     )}
                     <div className="text-end">
@@ -557,25 +574,27 @@ const Variation = () => {
                                                         <strong>{variant.sku}</strong>
                                                         <small className="d-block text-muted">ID: {variant.product_id}</small>
                                                     </td>
-                                                    {/* <td>
+                                                    <td>
+                                                        {/* FIX: Ensure data is treated as a number before calling toFixed() */}
                                                         <Badge bg="secondary">
                                                             ₹{
+                                                                // Use optional chaining for safety, then parseFloat, and finally toFixed(2)
+                                                                // If variant.price_modifier is null/undefined, it defaults to 0.
                                                                 parseFloat(variant.price_modifier || 0).toFixed(2)
                                                             }
                                                         </Badge>
-                                                    </td> */}
+                                                    </td>
                                                     <td>
                                                         <ul className="list-unstyled mb-0">
                                                             {variant.attributes.map((attr, index) => (
                                                                 <li key={attr.id} className="d-flex justify-content-between align-items-center py-1 border-bottom">
                                                                     <span className="me-2">
                                                                         **{attr.variation_type}**: {attr.variation_value}
-                                                                        {/* Indicate which row is the base row for modifier editing */}
-                                                                        {index === 0 && <Badge pill bg="info" className="ms-2">Base Row</Badge>}
                                                                     </span>
                                                                     <Button 
                                                                         variant="outline-info" 
                                                                         size="sm" 
+                                                                        // Pass both the attribute row and the parent SKU details
                                                                         onClick={() => openEditModal(attr, variant)}
                                                                     >
                                                                         <FaEdit />

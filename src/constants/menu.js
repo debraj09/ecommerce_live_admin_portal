@@ -63,6 +63,12 @@ const MENU_ITEMS = [{
     url: "/apps/ecommerce/inventory",
     parentKey: "apps-ecommerce"
   },
+  {
+    key: "ecommerce-category",
+    label: "Variation",
+    url: "/apps/ecommerce/variation ",
+    parentKey: "apps-ecommerce"
+  },
   
   
   {

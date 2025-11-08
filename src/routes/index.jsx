@@ -51,6 +51,7 @@ const CategoryManagement = React.lazy(() => import("../pages/apps/Ecommerce/Cate
 const InventoryManagement = React.lazy(() => import("../pages/apps/Ecommerce/InventoryManagement"));
 const Customers = React.lazy(() => import("../pages/apps/Ecommerce/Customers"));
 const Orders = React.lazy(() => import("../pages/apps/Ecommerce/Orders"));
+const Variation =React.lazy(() => import("../pages/apps/Ecommerce/Variation"));
 const OrderDetails = React.lazy(() => import("../pages/apps/Ecommerce/OrderDetails"));
 const Sellers = React.lazy(() => import("../pages/apps/Ecommerce/Sellers"));
 const Cart = React.lazy(() => import("../pages/apps/Ecommerce/Cart"));
@@ -262,6 +263,12 @@ const ecommerceAppRoutes = {
     path: "/apps/ecommerce/inventory",
     name: "Inventory/Store",
     element: <InventoryManagement />,
+    route: PrivateRoute
+  },
+  {
+    path: "/apps/ecommerce/variation",
+    name: "Inventory/variation",
+    element: <Variation />,
     route: PrivateRoute
   },
 
