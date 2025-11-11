@@ -1,18 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Row, Col, Card, Form, Button, Alert, Table, Modal, Badge } from "react-bootstrap";
-import { useForm, useFieldArray } from "react-hook-form";
+import { Row, Col, Card, Form, Button, Alert, Table, Modal, Badge, Pagination } from "react-bootstrap";
+import { useForm } from "react-hook-form";
 import * as yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { FaEdit, FaTrash, FaPlus, FaTimes, FaTags } from 'react-icons/fa';
-
-// Define the base URL for the API
-const API_BASE_URL = "https://ecomm.braventra.in/api"; 
-const VARIATION_API_URL = `${API_BASE_URL}/variations`;
+import { FaEdit, FaTrash, FaPlus, FaTimes, FaWarehouse, FaExclamationTriangle } from 'react-icons/fa';
 
 // ====================================================================
 // FormInput Helper Component (Re-used for consistency)
 // ====================================================================
-const FormInput = ({ name, label, type, placeholder, containerClass, register, errors, readOnly, children }) => {
+const FormInput = ({ name, label, type, placeholder, containerClass, register, errors, rows, readOnly, children }) => {
     return (
         <Form.Group className={containerClass}>
             <Form.Label>{label}</Form.Label>
@@ -41,444 +37,412 @@ const FormInput = ({ name, label, type, placeholder, containerClass, register, e
 };
 
 // ====================================================================
-// Variation Manager Component
+// Inventory Management Component
 // ====================================================================
-const Variation = () => {
-    const [products, setProducts] = useState([]); 
-    const [selectedProductId, setSelectedProductId] = useState('');
-    const [variants, setVariants] = useState([]); 
-    const [isLoading, setIsLoading] = useState(false);
+const InventoryManagement = () => {
+    const API_BASE_URL = "https://ecomm.braventra.in/api"; 
+    
+    const [inventory, setInventory] = useState([]);
+    const [lowStockItems, setLowStockItems] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isProductsLoading, setIsProductsLoading] = useState(false);
     const [submitStatus, setSubmitStatus] = useState({ message: '', variant: '' });
-
-    // Modal States
-    const [createModalShow, setCreateModalShow] = useState(false);
-    const [editModalShow, setEditModalShow] = useState(false);
-    const [currentAttribute, setCurrentAttribute] = useState(null); 
+    const [modalShow, setModalShow] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [currentInventory, setCurrentInventory] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Pagination states
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage] = useState(10);
+    const [totalPages, setTotalPages] = useState(1);
 
-    // --- Creation Validation Schema ---
-    const createSchema = yup.object().shape({
-        product_id: yup.number().typeError("Select product").required("Product is required").positive("Must be positive"),
-        sku: yup.string().required("SKU is required").max(50),
-        price_modifier: yup.number().typeError("Modifier must be a number").required("Modifier is required").min(0, "Cannot be negative"),
-        attributes: yup.array().of(
-            yup.object().shape({
-                type: yup.string().required("Type is required").max(50),
-                value: yup.string().required("Value is required").max(50),
-            })
-        ).min(1, "At least one attribute is required"),
+    // --- Validation Schema ---
+    const schemaResolver = yupResolver(yup.object().shape({
+        product_id: yup.number().typeError("Please select a product").required("Product is required").positive("Must be positive"),
+        quantity_in_stock: yup.number().typeError("Quantity must be a number").required("Quantity is required").min(0, "Cannot be negative"),
+        warehouse_location: yup.string().max(255, "Location cannot exceed 255 characters").nullable(),
+        reorder_point: yup.number().typeError("ROP must be a number").required("Reorder Point is required").min(0, "Cannot be negative"),
+    }));
+
+    const {
+        handleSubmit,
+        register,
+        formState: { errors },
+        reset,
+        setValue,
+        watch
+    } = useForm({
+        resolver: schemaResolver,
+        defaultValues: {
+            product_id: '',
+            quantity_in_stock: '',
+            warehouse_location: '',
+            reorder_point: 10,
+        },
     });
 
-    // --- Edit Validation Schema (for single attribute) ---
-    const editSchema = yup.object().shape({
-        variation_type: yup.string().max(50),
-        variation_value: yup.string().max(50),
-        price_modifier: yup.number().typeError("Modifier must be a number").min(0, "Cannot be negative").nullable(true),
-    });
+    // Watch product_id to get selected product name
+    const selectedProductId = watch('product_id');
 
-    // Use separate form instances for clarity
-    const createForm = useForm({
-        resolver: yupResolver(createSchema),
-        defaultValues: { product_id: '', sku: '', price_modifier: 0, attributes: [{ type: 'Size', value: '' }] },
-    });
-    const { fields, append, remove } = useFieldArray({ control: createForm.control, name: "attributes" });
-    
-    const editForm = useForm({
-        resolver: yupResolver(editSchema),
-    });
-    
     // ====================================================================
-    // Data Fetching Functions (Using fetch)
+    // Data Fetching Functions
     // ====================================================================
 
-    // Fetch all products for the main dropdown
+    // Fetch all products for dropdown and name mapping
     const fetchProducts = async () => {
         setIsProductsLoading(true);
         try {
             const response = await fetch(`${API_BASE_URL}/products`);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
             const data = await response.json();
-            setProducts(data.data && data.data.products ? data.data.products : []);
+            if (data.data && data.data.products) {
+                setProducts(data.data.products);
+            } else {
+                setProducts([]);
+            }
         } catch (err) {
             console.error("Error fetching products:", err);
             setSubmitStatus({ message: `Failed to fetch products: ${err.message}`, variant: 'danger' });
+            setProducts([]);
         } finally {
             setIsProductsLoading(false);
         }
     };
-    
-    // Fetch variations for the selected product
-    const fetchVariations = async (productId) => {
-        if (!productId) {
-            setVariants([]);
-            return;
-        }
 
+    // Fetch all inventory records and low stock alerts
+    const fetchInventoryData = async () => {
         setIsLoading(true);
         setSubmitStatus({ message: '', variant: '' });
         try {
-            const response = await fetch(`${VARIATION_API_URL}/${productId}`);
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({})); 
-                throw new Error(errorData.error || `Server returned status ${response.status}`);
+            // Fetch All Inventory
+            const invResponse = await fetch(`${API_BASE_URL}/inventory`); 
+            
+            let invData;
+            if (!invResponse.ok) {
+                const errorData = await invResponse.json().catch(() => ({})); 
+                const errorMessage = errorData.error || `HTTP error! status: ${invResponse.status}`;
+                throw new Error(errorMessage);
             }
-            const data = await response.json();
-            // Assuming the API returns a structured array of variants
-            setVariants(data.data || []);
+            invData = await invResponse.json();
+            
+            if (invData.data && invData.data.inventory) {
+                setInventory(invData.data.inventory);
+                // Calculate total pages for pagination
+                setTotalPages(Math.ceil(invData.data.inventory.length / itemsPerPage));
+            } else {
+                setInventory([]);
+                setTotalPages(1);
+            }
+
+            // Fetch Low Stock Items
+            const lowStockResponse = await fetch(`${API_BASE_URL}/inventory/low-stock`);
+            
+            if (!lowStockResponse.ok) {
+                const errorData = await lowStockResponse.json().catch(() => ({}));
+                console.error("Failed to fetch low stock:", errorData.error || `Status ${lowStockResponse.status}`);
+                setLowStockItems([]);
+            } else {
+                const lowStockData = await lowStockResponse.json();
+                if (lowStockData.data && lowStockData.data.lowStock) {
+                    setLowStockItems(lowStockData.data.lowStock);
+                } else {
+                    setLowStockItems([]);
+                }
+            }
+            
         } catch (err) {
-            console.error("Error fetching variations:", err);
-            setSubmitStatus({ message: `Failed to fetch variations: ${err.message}`, variant: 'danger' });
-            setVariants([]);
+            setSubmitStatus({ message: `Failed to fetch data: ${err.message}`, variant: 'danger' });
+            console.error("Error fetching inventory data:", err);
+            setInventory([]);
+            setTotalPages(1);
         } finally {
             setIsLoading(false);
         }
     };
 
     useEffect(() => {
+        fetchInventoryData();
         fetchProducts();
     }, []);
 
-    useEffect(() => {
-        // Automatically refetch variants when a product is selected
-        fetchVariations(selectedProductId);
-    }, [selectedProductId]);
-    
-    // Helper to get product name
+    // ====================================================================
+    // Helper Functions
+    // ====================================================================
+
+    // Get product name by product_id
     const getProductNameById = (productId) => {
-        const product = products.find(p => p.product_id === parseInt(productId));
-        return product ? product.name : `Product ID ${productId}`;
+        const product = products.find(p => p.product_id === productId);
+        return product ? product.name : `Product ${productId}`;
+    };
+
+    // Get product details by product_id
+    const getProductById = (productId) => {
+        return products.find(p => p.product_id === productId) || null;
     };
 
     // ====================================================================
-    // Modal Management
+    // Pagination Functions
     // ====================================================================
 
-    const openCreateModal = () => {
-        createForm.reset({ product_id: selectedProductId || '', sku: '', price_modifier: 0, attributes: [{ type: 'Size', value: '' }] });
-        setCreateModalShow(true);
+    // Get current items for pagination
+    const getCurrentInventory = () => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        return inventory.slice(startIndex, endIndex);
     };
 
-    const handleCreateModalClose = () => {
-        setCreateModalShow(false);
-        setSubmitStatus({ message: '', variant: '' });
+    // Handle page change
+    const handlePageChange = (pageNumber) => {
+        setCurrentPage(pageNumber);
     };
 
-    const openEditModal = (attributeRow, parentVariant) => {
-        setCurrentAttribute({
-            ...attributeRow, 
-            price_modifier: parentVariant.price_modifier 
-        });
+    // Generate pagination items
+    const renderPaginationItems = () => {
+        let items = [];
         
-        editForm.reset({
-            variation_type: attributeRow.variation_type,
-            variation_value: attributeRow.variation_value,
-            // Check if this attribute row is the one that holds the price modifier data
-            price_modifier: attributeRow.id === parentVariant.attributes[0].id 
-                            ? parentVariant.price_modifier 
-                            : null 
+        // Previous button
+        items.push(
+            <Pagination.Prev 
+                key="prev" 
+                onClick={() => handlePageChange(currentPage - 1)} 
+                disabled={currentPage === 1}
+            />
+        );
+
+        // Page numbers
+        for (let number = 1; number <= totalPages; number++) {
+            items.push(
+                <Pagination.Item
+                    key={number}
+                    active={number === currentPage}
+                    onClick={() => handlePageChange(number)}
+                >
+                    {number}
+                </Pagination.Item>
+            );
+        }
+
+        // Next button
+        items.push(
+            <Pagination.Next 
+                key="next" 
+                onClick={() => handlePageChange(currentPage + 1)} 
+                disabled={currentPage === totalPages}
+            />
+        );
+
+        return items;
+    };
+
+    // ====================================================================
+    // Modal/Form Management
+    // ====================================================================
+
+    const openAddModal = () => {
+        setIsEditing(false);
+        setCurrentInventory(null);
+        reset({ 
+            product_id: '', 
+            quantity_in_stock: '', 
+            warehouse_location: '', 
+            reorder_point: 10 
         });
-        setEditModalShow(true);
+        setModalShow(true);
     };
 
-    const handleEditModalClose = () => {
-        setEditModalShow(false);
+    const openEditModal = (item) => {
+        setIsEditing(true);
+        setCurrentInventory(item);
+        
+        reset(); 
+        setValue('product_id', item.product_id);
+        setValue('quantity_in_stock', item.quantity_in_stock);
+        setValue('warehouse_location', item.warehouse_location || '');
+        setValue('reorder_point', item.reorder_point);
+
+        setModalShow(true);
+    };
+
+    const handleModalClose = () => {
+        setModalShow(false);
         setSubmitStatus({ message: '', variant: '' });
-        setCurrentAttribute(null);
+    };
+
+    // Get selected product name for display
+    const getSelectedProductName = () => {
+        if (!selectedProductId) return '';
+        return getProductNameById(parseInt(selectedProductId));
     };
 
     // ====================================================================
-    // CRUD Submission Handlers (Using fetch)
+    // Handle Submissions
     // ====================================================================
 
-    // Handle Variant Creation 
-    const handleCreateSubmit = async (data) => {
+    const onSubmit = async (data) => {
         setIsSubmitting(true);
         setSubmitStatus({ message: '', variant: '' });
 
         const payload = {
             product_id: parseInt(data.product_id),
-            sku: data.sku,
-            price_modifier: parseFloat(data.price_modifier),
-            attributes: data.attributes.filter(attr => attr.type && attr.value)
+            quantity_in_stock: parseInt(data.quantity_in_stock),
+            warehouse_location: data.warehouse_location || null,
+            reorder_point: parseInt(data.reorder_point),
         };
 
+        let endpoint = `${API_BASE_URL}/inventory/add`;
+        let method = 'POST';
+
+        if (isEditing && currentInventory) {
+            endpoint = `${API_BASE_URL}/inventory/edit/${currentInventory.id}`;
+            method = 'PUT';
+            delete payload.product_id; 
+        }
+
         try {
-            const response = await fetch(`${VARIATION_API_URL}/create`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const response = await fetch(endpoint, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify(payload),
             });
             
-            const responseData = await response.json().catch(() => ({ message: 'Successfully created variant, but no JSON response.' }));
-            
             if (!response.ok) {
-                const errorMsg = responseData.error || `Server returned status ${response.status}`;
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.error || `Server returned status ${response.status}`;
                 throw new Error(errorMsg);
             }
 
-            setSubmitStatus({ message: responseData.message || 'New variant created successfully!', variant: 'success' });
-            fetchVariations(selectedProductId);
-            handleCreateModalClose();
+            const productName = getProductNameById(parseInt(data.product_id));
+            
+            const successMessage = isEditing 
+                ? `Inventory for ${productName} updated successfully!` 
+                : `New inventory record for ${productName} added successfully!`;
+                
+            setSubmitStatus({ message: successMessage, variant: 'success' });
+            fetchInventoryData();
+            handleModalClose();
 
         } catch (error) {
-            setSubmitStatus({ message: `Failed to create variant: ${error.message}`, variant: 'danger' });
-            console.error('Creation error:', error);
+            setSubmitStatus({ message: `Failed to ${isEditing ? 'update' : 'add'} inventory: ${error.message}`, variant: 'danger' });
+            console.error('Submission error:', error);
         } finally {
             setIsSubmitting(false);
         }
     };
-    
-    // Handle Attribute Update 
-    const handleEditSubmit = async (data) => {
-        setIsSubmitting(true);
+
+    const handleDelete = async (inventoryId, productName) => {
+        if (!window.confirm(`Are you sure you want to delete the inventory record for ${productName}?`)) {
+            return;
+        }
+
         setSubmitStatus({ message: '', variant: '' });
-
-        const payload = {};
-        if (data.variation_type !== undefined) payload.variation_type = data.variation_type;
-        if (data.variation_value !== undefined) payload.variation_value = data.variation_value;
-        // Only include price_modifier if it was present/editable in the form
-        if (currentAttribute.price_modifier !== null) {
-            payload.price_modifier = data.price_modifier;
-        }
-
-        if (Object.keys(payload).length === 0) {
-            setSubmitStatus({ message: 'No changes detected to update.', variant: 'info' });
-            setIsSubmitting(false);
-            return;
-        }
-
-        try {
-            const response = await fetch(`${VARIATION_API_URL}/edit/${currentAttribute.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            
-            const responseData = await response.json().catch(() => ({ message: 'Successfully updated attribute, but no JSON response.' }));
-            
-            if (!response.ok) {
-                const errorMsg = responseData.error || `Server returned status ${response.status}`;
-                throw new Error(errorMsg);
-            }
-
-            setSubmitStatus({ message: responseData.message || 'Attribute updated successfully!', variant: 'success' });
-            fetchVariations(selectedProductId);
-            handleEditModalClose();
-
-        } catch (error) {
-            setSubmitStatus({ message: `Failed to update attribute: ${error.message}`, variant: 'danger' });
-            console.error('Update error:', error);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    // Handle Variant Deletion
-    const handleDeleteVariant = async (sku) => {
-        if (!window.confirm(`Are you sure you want to delete the entire variant with SKU: ${sku}? This action cannot be undone.`)) {
-            return;
-        }
-
-        setSubmitStatus({ message: 'Deleting variant...', variant: 'info' });
         
         try {
-            const response = await fetch(`${VARIATION_API_URL}/delete/${sku}`, {
+            const response = await fetch(`${API_BASE_URL}/inventory/delete/${inventoryId}`, {
                 method: 'DELETE',
             });
 
-            const responseData = await response.json().catch(() => ({ message: 'Successfully deleted variant, but no JSON response.' }));
-            
             if (!response.ok) {
-                const errorMsg = responseData.error || `Server returned status ${response.status}`;
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.error || `Server returned status ${response.status}`;
                 throw new Error(errorMsg);
             }
             
-            setSubmitStatus({ message: responseData.message || `Variant ${sku} deleted successfully.`, variant: 'success' });
-            fetchVariations(selectedProductId); 
+            setSubmitStatus({ message: `Inventory for ${productName} deleted successfully.`, variant: 'success' });
+            fetchInventoryData();
             
         } catch (error) {
-            setSubmitStatus({ message: `Failed to delete variant: ${error.message}`, variant: 'danger' });
+            setSubmitStatus({ message: `Failed to delete inventory: ${error.message}`, variant: 'danger' });
             console.error('Deletion error:', error);
         }
     };
-
+    
     // ====================================================================
-    // Render Components
+    // Render Functions
     // ====================================================================
 
-    const CreateVariationModal = () => (
-        <Modal show={createModalShow} onHide={handleCreateModalClose} backdrop="static" keyboard={false} size="xl">
+    const InventoryModal = () => (
+        <Modal show={modalShow} onHide={handleModalClose} backdrop="static" keyboard={false} size="lg">
             <Modal.Header closeButton>
-                <Modal.Title><FaPlus className="me-2" /> Add New Product Variant (SKU)</Modal.Title>
+                <Modal.Title>{isEditing ? 'Edit Stock Record' : 'Add New Stock Record'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
-                <form onSubmit={createForm.handleSubmit(handleCreateSubmit)}>
-                    
-                    <Row>
-                        <Col md={6}>
-                            <FormInput
-                                name="product_id"
-                                label="Parent Product"
-                                type="select"
-                                containerClass="mb-3"
-                                register={createForm.register}
-                                errors={createForm.formState.errors}
-                                readOnly={isProductsLoading}
-                            >
-                                <option value="">Select a product</option>
-                                {products.map((p) => (
-                                    <option key={p.product_id} value={p.product_id}>
-                                        {p.name} (ID: {p.product_id})
-                                    </option>
-                                ))}
-                            </FormInput>
-                        </Col>
-                        <Col md={6}>
-                            <FormInput
-                                name="sku"
-                                label="SKU (Stock Keeping Unit)"
-                                type="text"
-                                placeholder="e.g. TSHIRT-LG-RED"
-                                containerClass="mb-3"
-                                register={createForm.register}
-                                errors={createForm.formState.errors}
-                            />
-                        </Col>
-                    </Row>
-                    
+                <form onSubmit={handleSubmit(onSubmit)}>
                     <FormInput
-                        name="price_modifier"
-                        label="Price Modifier (Added to Base Price)"
-                        type="number"
-                        placeholder="e.g. 5.00 (or 0 for no change)"
-                        containerClass="mb-4"
-                        register={createForm.register}
-                        errors={createForm.formState.errors}
-                    />
+                        name="product_id"
+                        label="Product"
+                        type="select"
+                        containerClass="mb-3"
+                        register={register}
+                        errors={errors}
+                        readOnly={isEditing}
+                    >
+                        <option value="">Select a product</option>
+                        {products.map((product) => (
+                            <option key={product.product_id} value={product.product_id}>
+                                {product.name} (ID: {product.product_id})
+                            </option>
+                        ))}
+                    </FormInput>
 
-                    <Card className="mb-4">
-                        <Card.Header className="bg-light">
-                            <h5 className="mb-0">Variant Attributes (e.g., Size, Color)</h5>
-                        </Card.Header>
-                        <Card.Body>
-                            {fields.map((field, index) => (
-                                <Row key={field.id} className="mb-3 align-items-center">
-                                    <Col md={4}>
-                                        <FormInput
-                                            name={`attributes.${index}.type`}
-                                            label={`Attribute ${index + 1} Type`}
-                                            type="text"
-                                            placeholder="e.g., color"
-                                            register={createForm.register}
-                                            errors={createForm.formState.errors}
-                                        />
-                                    </Col>
-                                    <Col md={6}>
-                                        <FormInput
-                                            name={`attributes.${index}.value`}
-                                            label={`Attribute ${index + 1} Value`}
-                                            type="text"
-                                            placeholder="e.g., blue"
-                                            register={createForm.register}
-                                            errors={createForm.formState.errors}
-                                        />
-                                    </Col>
-                                    <Col md={2} className="text-end">
-                                        {index > 0 && (
-                                            <Button variant="danger" size="sm" onClick={() => remove(index)}>
-                                                <FaTimes />
-                                            </Button>
-                                        )}
-                                    </Col>
-                                </Row>
-                            ))}
-                            <Button variant="outline-secondary" size="sm" onClick={() => append({ type: 'Size', value: '' })}>
-                                <FaPlus className="me-1" /> Add Another Attribute
-                            </Button>
-                        </Card.Body>
-                    </Card>
-
-                    <div className="text-end">
-                        <Button variant="light" className="me-2" onClick={handleCreateModalClose}>Cancel</Button>
-                        <Button type="submit" variant="success" disabled={isSubmitting}>
-                            {isSubmitting ? 'Creating...' : 'Create Variant'}
-                        </Button>
-                    </div>
-                </form>
-            </Modal.Body>
-        </Modal>
-    );
-
-    const EditVariationModal = () => (
-        <Modal show={editModalShow} onHide={handleEditModalClose} backdrop="static" keyboard={false} size="lg">
-            <Modal.Header closeButton>
-                <Modal.Title><FaEdit className="me-2" /> Edit Attribute/Modifier (ID: {currentAttribute?.id})</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-                <Alert variant="info" className="py-2">
-                    <small>
-                        **SKU:** {currentAttribute?.sku} | **Product:** {getProductNameById(currentAttribute?.product_id)}
-                    </small>
-                </Alert>
-                <form onSubmit={editForm.handleSubmit(handleEditSubmit)}>
-                    
-                    <Row>
-                        <Col md={6}>
-                            <FormInput
-                                name="variation_type"
-                                label="Variation Type"
-                                type="text"
-                                placeholder="e.g., color"
-                                containerClass="mb-3"
-                                register={editForm.register}
-                                errors={editForm.formState.errors}
-                            />
-                        </Col>
-                        <Col md={6}>
-                            <FormInput
-                                name="variation_value"
-                                label="Variation Value"
-                                type="text"
-                                placeholder="e.g., blue"
-                                containerClass="mb-3"
-                                register={editForm.register}
-                                errors={editForm.formState.errors}
-                            />
-                        </Col>
-                    </Row>
-                    
-                    {/* Only show Price Modifier if this is the 'base' attribute row for the SKU */}
-                    {currentAttribute && currentAttribute.id === currentAttribute.attributes?.[0]?.id && (
-                        <FormInput
-                            name="price_modifier"
-                            label="Price Modifier (Edit SKU Base Modifier)"
-                            type="number"
-                            placeholder="e.g. 5.00"
-                            containerClass="mb-4"
-                            register={editForm.register}
-                            errors={editForm.formState.errors}
-                        />
+                    {selectedProductId && (
+                        <Alert variant="info" className="py-2">
+                            <small>
+                                <strong>Selected Product:</strong> {getSelectedProductName()}
+                                {isEditing && ` (Current Stock: ${currentInventory?.quantity_in_stock})`}
+                            </small>
+                        </Alert>
                     )}
+
+                    <FormInput
+                        name="quantity_in_stock"
+                        label="Quantity in Stock"
+                        type="number"
+                        placeholder="e.g. 150"
+                        containerClass="mb-3"
+                        register={register}
+                        errors={errors}
+                    />
+                    <FormInput
+                        name="reorder_point"
+                        label="Reorder Point (ROP)"
+                        type="number"
+                        placeholder="e.g. 20"
+                        containerClass="mb-3"
+                        register={register}
+                        errors={errors}
+                    />
+                    <FormInput
+                        name="warehouse_location"
+                        label="Warehouse Location (Optional)"
+                        type="text"
+                        placeholder="e.g. Aisle B-4"
+                        containerClass="mb-4"
+                        register={register}
+                        errors={errors}
+                    />
                     <div className="text-end">
-                        <Button variant="light" className="me-2" onClick={handleEditModalClose}>Cancel</Button>
-                        <Button type="submit" variant="success" disabled={isSubmitting}>
-                            {isSubmitting ? 'Saving...' : 'Update Attribute'}
+                        <Button variant="light" className="me-2" onClick={handleModalClose}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" variant="success" disabled={isSubmitting || isProductsLoading}>
+                            {isSubmitting ? 'Saving...' : (isEditing ? 'Update Stock' : 'Save Stock')}
                         </Button>
                     </div>
                 </form>
             </Modal.Body>
         </Modal>
     );
-
 
     return (
         <div style={{ padding: '20px', backgroundColor: '#f4f7f9' }}>
-            <CreateVariationModal />
-            <EditVariationModal />
-            
-            <h4 className="mb-4 d-flex align-items-center"><FaTags className="me-2" /> Product Variation Management</h4>
+            <InventoryModal />
+            <h4 className="mb-4 d-flex align-items-center"><FaWarehouse className="me-2" /> Inventory Management</h4>
             
             {submitStatus.message && (
                 <Alert variant={submitStatus.variant} className="mb-3 text-center">
@@ -486,118 +450,133 @@ const Variation = () => {
                 </Alert>
             )}
 
-            {/* Product Selection */}
-            <Row className="mb-3">
-                <Col md={8}>
-                    <Card>
-                        <Card.Body>
-                            <Form.Group>
-                                <Form.Label>Select Product to Manage Variations</Form.Label>
-                                <Form.Select
-                                    value={selectedProductId}
-                                    onChange={(e) => setSelectedProductId(e.target.value)}
-                                    disabled={isProductsLoading || isLoading}
-                                >
-                                    <option value="">-- Select Parent Product --</option>
-                                    {products.map((p) => (
-                                        <option key={p.product_id} value={p.product_id}>
-                                            {p.name} (ID: {p.product_id})
-                                        </option>
-                                    ))}
-                                </Form.Select>
-                            </Form.Group>
-                            {selectedProductId && (
-                                <p className="text-muted mt-2 mb-0">
-                                    Managing variations for: **{getProductNameById(selectedProductId)}**
-                                </p>
-                            )}
-                        </Card.Body>
-                    </Card>
-                </Col>
-                <Col md={4} className="d-flex align-items-center">
-                    <Button variant="primary" onClick={openCreateModal} disabled={!selectedProductId || isProductsLoading} className="w-100">
-                        <FaPlus className="me-1" /> 
-                        {isProductsLoading ? 'Loading Products...' : 'Add New Variant (SKU)'}
-                    </Button>
-                </Col>
-            </Row>
-            
-            {/* Variants Table */}
+            {/* Low Stock Alert Section */}
+            {lowStockItems.length > 0 && (
+                <Alert variant="warning" className="mb-4">
+                    <h5 className="mb-2"><FaExclamationTriangle className="me-2" /> Low Stock Alert!</h5>
+                    <p className="mb-1">
+                        {lowStockItems.length} product(s) are currently below their Reorder Point (ROP). Please initiate a restock immediately.
+                    </p>
+                    <ul className="mb-0">
+                        {lowStockItems.slice(0, 5).map(item => {
+                            const productName = getProductNameById(item.product_id);
+                            return (
+                                <li key={item.id}>
+                                    {productName} (ID: {item.product_id}) - Stock: {item.quantity_in_stock}, ROP: {item.reorder_point}
+                                </li>
+                            );
+                        })}
+                        {lowStockItems.length > 5 && (
+                             <li>...and {lowStockItems.length - 5} more items.</li>
+                        )}
+                    </ul>
+                </Alert>
+            )}
+
             <Row>
                 <Col xs={12}>
                     <Card>
-                        <Card.Header className="bg-light">
-                            <h5 className="mb-0">Variants for {selectedProductId ? getProductNameById(selectedProductId) : 'Selected Product'}</h5>
+                        <Card.Header className="d-flex justify-content-between align-items-center bg-light">
+                            <h5 className="mb-0">Current Stock Levels</h5>
+                            <Button variant="primary" onClick={openAddModal} disabled={isProductsLoading}>
+                                <FaPlus className="me-1" /> 
+                                {isProductsLoading ? 'Loading Products...' : 'Add New Record'}
+                            </Button>
                         </Card.Header>
                         <Card.Body>
                             {isLoading ? (
                                 <div className="text-center py-4">
                                     <div className="spinner-border text-primary" role="status"></div>
-                                    <span className="ms-2">Loading Variants...</span>
+                                    <span className="ms-2">Loading Inventory...</span>
                                 </div>
-                            ) : variants.length === 0 && selectedProductId ? (
-                                <Alert variant="info" className="text-center">No variants found for this product. Click "Add New Variant (SKU)" to begin.</Alert>
-                            ) : !selectedProductId ? (
-                                <Alert variant="secondary" className="text-center">Please select a product above to view and manage its variations.</Alert>
+                            ) : inventory.length === 0 ? (
+                                <Alert variant="info" className="text-center">No inventory records found. Click "Add New Record" to begin.</Alert>
                             ) : (
-                                <div className="table-responsive">
-                                    <Table striped bordered hover className="mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>SKU</th>
-                                                <th>Price Modifier</th>
-                                                <th>Attributes & Values</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {variants.map((variant) => (
-                                                <tr key={variant.sku}>
-                                                    <td>
-                                                        <strong>{variant.sku}</strong>
-                                                        <small className="d-block text-muted">ID: {variant.product_id}</small>
-                                                    </td>
-                                                    {/* <td>
-                                                        <Badge bg="secondary">
-                                                            ₹{
-                                                                parseFloat(variant.price_modifier || 0).toFixed(2)
-                                                            }
-                                                        </Badge>
-                                                    </td> */}
-                                                    <td>
-                                                        <ul className="list-unstyled mb-0">
-                                                            {variant.attributes.map((attr, index) => (
-                                                                <li key={attr.id} className="d-flex justify-content-between align-items-center py-1 border-bottom">
-                                                                    <span className="me-2">
-                                                                        **{attr.variation_type}**: {attr.variation_value}
-                                                                        {/* Indicate which row is the base row for modifier editing */}
-                                                                        {index === 0 && <Badge pill bg="info" className="ms-2">Base Row</Badge>}
-                                                                    </span>
-                                                                    <Button 
-                                                                        variant="outline-info" 
-                                                                        size="sm" 
-                                                                        onClick={() => openEditModal(attr, variant)}
-                                                                    >
-                                                                        <FaEdit />
-                                                                    </Button>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </td>
-                                                    <td style={{ minWidth: '100px' }}>
-                                                        <Button 
-                                                            variant="danger" 
-                                                            size="sm" 
-                                                            onClick={() => handleDeleteVariant(variant.sku)}
-                                                        >
-                                                            <FaTrash className="me-1" /> Delete SKU
-                                                        </Button>
-                                                    </td>
+                                <>
+                                    <div className="table-responsive">
+                                        <Table striped bordered hover className="mb-3">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID</th>
+                                                    <th>Product Name</th>
+                                                    <th>Stock</th>
+                                                    <th>Location</th>
+                                                    <th>ROP</th>
+                                                    <th>Status</th>
+                                                    <th>Actions</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </Table>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                {getCurrentInventory().map((item) => {
+                                                    const isLowStock = item.quantity_in_stock < item.reorder_point;
+                                                    const productName = getProductNameById(item.product_id);
+                                                    const product = getProductById(item.product_id);
+                                                    
+                                                    return (
+                                                        <tr key={item.id} className={isLowStock ? 'table-warning' : ''}>
+                                                            <td>{item.id}</td>
+                                                            <td>
+                                                                <div>
+                                                                    <strong>{productName}</strong>
+                                                                    {product && (
+                                                                        <div>
+                                                                            <small className="text-muted">
+                                                                                Category: {product.category_id} | 
+                                                                                Price: ₹{product.price}
+                                                                            </small>
+                                                                        </div>
+                                                                    )}
+                                                                    <small className="text-muted d-block">Product ID: {item.product_id}</small>
+                                                                </div>
+                                                            </td>
+                                                            <td>{item.quantity_in_stock}</td>
+                                                            <td>{item.warehouse_location || 'N/A'}</td>
+                                                            <td>{item.reorder_point}</td>
+                                                            <td>
+                                                                <Badge bg={isLowStock ? 'danger' : 'success'}>
+                                                                    {isLowStock ? 'LOW' : 'OK'}
+                                                                </Badge>
+                                                            </td>
+                                                            <td style={{ minWidth: '150px' }}>
+                                                                <Button 
+                                                                    variant="info" 
+                                                                    size="sm" 
+                                                                    className="me-2 mb-1"
+                                                                    onClick={() => openEditModal(item)}
+                                                                >
+                                                                    <FaEdit /> Edit
+                                                                </Button>
+                                                                <Button 
+                                                                    variant="danger" 
+                                                                    size="sm" 
+                                                                    className="mb-1"
+                                                                    onClick={() => handleDelete(item.id, productName)}
+                                                                >
+                                                                    <FaTrash /> Delete
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </Table>
+                                    </div>
+                                    
+                                    {/* Pagination */}
+                                    {totalPages > 1 && (
+                                        <div className="d-flex justify-content-center">
+                                            <Pagination>
+                                                {renderPaginationItems()}
+                                            </Pagination>
+                                        </div>
+                                    )}
+                                    
+                                    {/* Pagination Info */}
+                                    <div className="text-muted text-center mt-2">
+                                        Showing {getCurrentInventory().length} of {inventory.length} records
+                                        {totalPages > 1 && ` (Page ${currentPage} of ${totalPages})`}
+                                    </div>
+                                </>
                             )}
                         </Card.Body>
                     </Card>
@@ -607,4 +586,4 @@ const Variation = () => {
     );
 };
 
-export default Variation;
+export default InventoryManagement;
