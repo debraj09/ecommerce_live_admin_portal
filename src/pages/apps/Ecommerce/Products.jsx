@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-// 🔥 Added Modal for better UX
 import { Row, Col, Card, Button, Alert, Badge, Modal, Form } from "react-bootstrap"; 
 import { useNavigate } from 'react-router-dom';
 
@@ -16,14 +15,14 @@ const Products = () => {
     const [allProducts, setAllProducts] = useState([]);
     const navigate = useNavigate();
 
-    // 🔥 NEW STATES FOR BULK UPLOAD
+    // 🔥 UPDATED STATES FOR BULK UPLOAD
     const [showModal, setShowModal] = useState(false);
     const [csvFile, setCsvFile] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState(null);
 
     // The correct API endpoint for our backend
-    const API_BASE_URL = "https://ecomm.braventra.in/api/products";
+    const API_BASE_URL = "https://ecomm.braventra.in/api";
 
     // --------------------------------------------------
     // API FETCH FUNCTION
@@ -32,8 +31,8 @@ const Products = () => {
         setLoading(true);
         setError(null);
         try {
-            console.log("Fetching products from:", API_BASE_URL);
-            const response = await fetch(API_BASE_URL);
+            console.log("Fetching products from:", `${API_BASE_URL}/products`);
+            const response = await fetch(`${API_BASE_URL}/products`);
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -61,7 +60,7 @@ const Products = () => {
     }, []);
 
     // --------------------------------------------------
-    // BULK UPLOAD LOGIC
+    // BULK UPLOAD LOGIC - CORRECTED ENDPOINTS
     // --------------------------------------------------
     const handleFileChange = (e) => {
         setCsvFile(e.target.files[0]);
@@ -83,8 +82,10 @@ const Products = () => {
         setUploadResult(null);
 
         try {
-            const uploadUrl = `${API_BASE_URL}/bulk-upload`;
+            // 🔥 CORRECT ENDPOINT: /api/bulk-upload/products
+            const uploadUrl = `${API_BASE_URL}/bulk-upload/products`;
             console.log("Uploading CSV to:", uploadUrl);
+            
             const response = await fetch(uploadUrl, {
                 method: 'POST',
                 body: formData, // FormData automatically sets the correct 'Content-Type: multipart/form-data'
@@ -100,26 +101,69 @@ const Products = () => {
             // Re-fetch product list on successful completion (even if some rows had errors)
             if (response.ok) {
                 fetchProducts();
+                // Auto-close modal after successful upload
+                setTimeout(() => setShowModal(false), 2000);
             }
 
         } catch (err) {
             console.error("Bulk Upload error:", err);
             setUploading(false);
             setUploadResult({ 
-                message: 'A network or critical server error occurred.', 
-                error: err.message 
+                status: 500,
+                error: 'A network or critical server error occurred.', 
+                details: err.message 
             });
         }
     };
 
+    // 🔥 NEW: Download Template Function
+    const downloadTemplate = async () => {
+        try {
+            // 🔥 CORRECT ENDPOINT: /api/bulk-upload/download-template
+            const response = await fetch(`${API_BASE_URL}/bulk-upload/download-template`);
+            
+            if (!response.ok) {
+                throw new Error('Failed to download template');
+            }
+
+            // Create blob and download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'product_bulk_upload_template.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+        } catch (err) {
+            console.error('Download template error:', err);
+            alert('Error downloading template: ' + err.message);
+        }
+    };
+
+    // 🔥 NEW: Get Template Info Function
+    const getTemplateInfo = async () => {
+        try {
+            // 🔥 CORRECT ENDPOINT: /api/bulk-upload/template
+            const response = await fetch(`${API_BASE_URL}/bulk-upload/template`);
+            const data = await response.json();
+            return data;
+        } catch (err) {
+            console.error('Template info error:', err);
+            return null;
+        }
+    };
+
     // --------------------------------------------------
-    // OTHER LOGIC (Delete, Search, Sort)
+    // OTHER LOGIC (Delete, Search, Sort) - UNCHANGED
     // --------------------------------------------------
     const deleteProduct = async (productId) => {
         if (window.confirm("Are you sure you want to delete this product?")) {
-            // ... (delete logic is fine as it is) ...
             try {
-                const response = await fetch(`${API_BASE_URL}/delete/${productId}`, {
+                const response = await fetch(`${API_BASE_URL}/products/delete/${productId}`, {
                     method: 'DELETE',
                 });
 
@@ -225,9 +269,9 @@ const Products = () => {
                     <div className="mb-3">
                         <h6>Troubleshooting steps:</h6>
                         <ol>
-                            <li>Make sure your backend server is running on port 3000.</li>
-                            <li>Check if <a href={API_BASE_URL} target="_blank" rel="noopener noreferrer">
-                                {API_BASE_URL}
+                            <li>Make sure your backend server is running.</li>
+                            <li>Check if <a href={`${API_BASE_URL}/products`} target="_blank" rel="noopener noreferrer">
+                                {`${API_BASE_URL}/products`}
                             </a> works in your browser.</li>
                             <li>Check your browser console for detailed error messages.</li>
                         </ol>
@@ -250,32 +294,54 @@ const Products = () => {
                 title={"Products"}
             />
             
-            {/* 🔥 NEW: Bulk Upload Section */}
+            {/* 🔥 UPDATED: Bulk Upload Section */}
             <Row className="mb-3">
                 <Col className="d-flex justify-content-between align-items-center">
                     <div className="d-flex">
-                        {/* <Button 
-                            variant="primary" 
-                            className="me-2"
-                            onClick={() => navigate('/apps/ecommerce/add-product')}
-                        >
-                            <i className="mdi mdi-plus-circle me-1"></i> Add Product
-                        </Button> */}
                         <Button 
                             variant="success" 
                             onClick={() => setShowModal(true)}
+                            className="me-2"
                         >
                             <i className="mdi mdi-upload me-1"></i> Bulk Upload (CSV)
                         </Button>
+                        {/* <Button 
+                            variant="outline-primary" 
+                            onClick={downloadTemplate}
+                        >
+                            <i className="mdi mdi-download me-1"></i> Download Template
+                        </Button> */}
                     </div>
 
-                    {/* Search and Sort (You should integrate these inputs here, but I am keeping them out for brevity) */}
-                    {/* <div className="d-flex"> ... Search/Sort UI elements ... </div> */}
+                    {/* Search Input */}
+                    <div className="d-flex align-items-center">
+                        <Form.Control
+                            type="text"
+                            placeholder="Search products..."
+                            value={searchTerm}
+                            onChange={(e) => searchProduct(e.target.value)}
+                            style={{ width: '250px' }}
+                        />
+                    </div>
                 </Col>
             </Row>
 
+            {/* Sort Dropdown */}
+            <Row className="mb-3">
+                <Col>
+                    <Form.Select 
+                        onChange={(e) => handleSortChange(e.target.value)}
+                        style={{ width: '200px' }}
+                    >
+                        <option value="">Sort by...</option>
+                        <option value="pricelow">Price: Low to High</option>
+                        <option value="pricehigh">Price: High to Low</option>
+                        <option value="lowstock">Low Stock</option>
+                    </Form.Select>
+                </Col>
+            </Row>
 
-            {/* ... (rest of the component's UI, including search and sort) ... */}
+            {/* Products Grid */}
             <Row className="mt-3">
                 {products.length > 0 ? (
                     products.map((product) => {
@@ -362,19 +428,22 @@ const Products = () => {
                 )}
             </Row>
 
-            {/* 🔥 NEW: Bulk Upload Modal */}
-            <Modal show={showModal} onHide={() => setShowModal(false)} backdrop="static" keyboard={false}>
+            {/* 🔥 UPDATED: Bulk Upload Modal */}
+            <Modal show={showModal} onHide={() => setShowModal(false)} backdrop="static" keyboard={false} size="lg">
                 <Modal.Header closeButton>
                     <Modal.Title>Bulk Product Upload via CSV</Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
-                    <Alert variant="info" className="p-2 mb-3">
+                    <Alert variant="info" className="mb-3">
+                        <h6>CSV Format Requirements:</h6>
                         <small>
-                            Please ensure your CSV file has the required headers: 
-                            <br/>
-                            **product\_name, sku, category\_name, base\_price, base\_stock, color, size, description, long\_description, subcategory\_name**
+                            <strong>Required fields:</strong> name, price<br/>
+                            <strong>Optional fields:</strong> description, long_description, image_url, stock_quantity,<br/>
+                            brand_id, brand_name, category_id, category_name, subcategory_id, subcategory_name<br/>
+                            <strong>Download the template for all available columns and examples.</strong>
                         </small>
                     </Alert>
+                    
                     <Form onSubmit={handleBulkUpload}>
                         <Form.Group controlId="csvFile" className="mb-3">
                             <Form.Label>Select CSV File</Form.Label>
@@ -384,43 +453,81 @@ const Products = () => {
                                 onChange={handleFileChange} 
                                 required
                             />
+                            <Form.Text className="text-muted">
+                                Maximum file size: 10MB. Only CSV files are allowed.
+                            </Form.Text>
                         </Form.Group>
                         
-                        <Button 
-                            variant="success" 
-                            type="submit" 
-                            className="w-100"
-                            disabled={uploading || !csvFile}
-                        >
-                            {uploading ? 'Uploading...' : 'Upload and Process'}
-                        </Button>
+                        <div className="d-grid gap-2">
+                            <Button 
+                                variant="success" 
+                                type="submit" 
+                                disabled={uploading || !csvFile}
+                            >
+                                {uploading ? (
+                                    <>
+                                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                        Uploading...
+                                    </>
+                                ) : (
+                                    'Upload and Process CSV'
+                                )}
+                            </Button>
+                            
+                            <Button 
+                                variant="outline-primary" 
+                                onClick={downloadTemplate}
+                                type="button"
+                            >
+                                <i className="mdi mdi-download me-1"></i> Download CSV Template
+                            </Button>
+                        </div>
                     </Form>
                     
                     {/* Upload Result Display */}
                     {uploadResult && (
                         <div className="mt-3 p-3 border rounded">
-                            <h6>Upload Summary:</h6>
-                            <Alert variant={uploadResult.errorCount > 0 ? 'warning' : 'success'} className="mb-1">
+                            <h6>Upload Results:</h6>
+                            <Alert variant={
+                                uploadResult.status === 200 ? 'success' : 
+                                uploadResult.status === 400 ? 'warning' : 'danger'
+                            } className="mb-2">
                                 {uploadResult.message || uploadResult.error}
                             </Alert>
-                            {uploadResult.successCount !== undefined && (
-                                <p className="mb-0">Successful records: <Badge bg="success">{uploadResult.successCount}</Badge></p>
+                            
+                            {uploadResult.summary && (
+                                <div className="row text-center">
+                                    <div className="col">
+                                        <strong>Total Processed</strong><br/>
+                                        <Badge bg="secondary">{uploadResult.summary.total_processed}</Badge>
+                                    </div>
+                                    <div className="col">
+                                        <strong>Successful</strong><br/>
+                                        <Badge bg="success">{uploadResult.summary.successful}</Badge>
+                                    </div>
+                                    <div className="col">
+                                        <strong>Failed</strong><br/>
+                                        <Badge bg="danger">{uploadResult.summary.failed}</Badge>
+                                    </div>
+                                </div>
                             )}
-                            {uploadResult.errorCount !== undefined && uploadResult.errorCount > 0 && (
-                                <>
-                                    <p className="mb-0">Failed records: <Badge bg="danger">{uploadResult.errorCount}</Badge></p>
-                                    <small className="d-block mt-2 text-muted">See console for detailed row errors.</small>
-                                </>
-                            )}
-                            {(uploadResult.error || (uploadResult.errorCount > 0)) && (
-                                <p className="text-danger mt-2 mb-0">Error Details: {uploadResult.error || (uploadResult.errors && uploadResult.errors[0]?.reason)}</p>
+                            
+                            {uploadResult.errors && uploadResult.errors.length > 0 && (
+                                <div className="mt-2">
+                                    <small className="text-muted">
+                                        Check browser console for detailed error information per row.
+                                    </small>
+                                </div>
                             )}
                         </div>
                     )}
-
                 </Modal.Body>
                 <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowModal(false)}>
+                    <Button variant="secondary" onClick={() => {
+                        setShowModal(false);
+                        setUploadResult(null);
+                        setCsvFile(null);
+                    }}>
                         Close
                     </Button>
                 </Modal.Footer>
