@@ -1,172 +1,391 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { Row, Col, Card, Button } from "react-bootstrap";
+import React, { useState, useEffect } from "react";
+import { Row, Col, Card, Button, Badge, Modal, Form, Alert, Table } from "react-bootstrap";
 import classNames from "classnames";
+import { Link, useNavigate } from "react-router-dom";
 
 // components
 import PageTitle from "../../../components/PageTitle";
-import Table from "../../../components/Table";
-
-// dummy data
-import { orders } from "./data";
+import TableComponent from "../../../components/Table";
 
 /* order column render */
-const OrderColumn = ({
-  row
-}) => {
-  return <>
-      <Link to="/apps/ecommerce/order/details" className="text-body fw-bold">
-        #BM{row.original.order_id}
-      </Link>
-    </>;
-};
-
-/* product column render */
-const ProductsColumn = ({
-  row
-}) => {
-  return <>
-      {(row.original.product_img || []).map((img, index) => {
-      return <Link to="/apps/ecommerce/product-details" key={index}>
-            <img src={img} alt="" height="32" />
-          </Link>;
-    })}
-    </>;
-};
-
-/* orderdate column render */
-const OrderDateColumn = ({
-  row
-}) => {
-  return <>
-      {row.original.order_date}{" "}
-      <small className="text-muted">{row.original.order_time}</small>
-    </>;
-};
-
-/* payment column render */
-const PaymentStatusColumn = ({
-  row
-}) => {
-  return <>
-      <h5>
-        <span className={classNames("badge", {
-        "bg-soft-success text-success": row.original.payment_status === "Paid",
-        "bg-soft-danger text-danger": row.original.payment_status === "Payment Failed",
-        "bg-soft-info text-info": row.original.payment_status === "Unpaid",
-        "bg-soft-warning text-warning": row.original.payment_status === "Awaiting Authorization"
-      })}>
-          {row.original.payment_status === "Paid" && <i className="mdi mdi-bitcoin me-1"></i>}
-          {row.original.payment_status === "Payment Failed" && <i className="mdi mdi-cancel me-1"></i>}
-          {row.original.payment_status === "Unpaid" && <i className="mdi mdi-cash me-1"></i>}
-          {row.original.payment_status === "Awaiting Authorization" && <i className="mdi mdi-timer-sand me-1"></i>}
-          {row.original.payment_status}
-        </span>
-      </h5>
-    </>;
+const OrderColumn = ({ row }) => {
+  return (
+    <Link to={`/apps/ecommerce/order/details/${row.original.order_id}`} className="text-body fw-bold">
+      #ORD{row.original.order_id}
+    </Link>
+  );
 };
 
 /* status column render */
-const StatusColumn = ({
-  row
-}) => {
-  return <>
-      <h5>
-        <span className={classNames("badge", {
-        "bg-success": row.original.order_status === "Delivered",
-        "bg-danger": row.original.order_status === "Cancelled",
-        "bg-info": row.original.order_status === "Shipped",
-        "bg-warning": row.original.order_status === "Processing"
-      })}>
-          {row.original.order_status}
-        </span>
-      </h5>
-    </>;
+const StatusColumn = ({ row }) => {
+  const getStatusClass = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'delivered':
+      case 'completed':
+        return "bg-success";
+      case 'cancelled':
+        return "bg-danger";
+      case 'shipped':
+        return "bg-info";
+      case 'processing':
+        return "bg-warning";
+      case 'pending':
+        return "bg-secondary";
+      default:
+        return "bg-light text-dark";
+    }
+  };
+
+  return (
+    <h5>
+      <span className={classNames("badge", getStatusClass(row.original.status))}>
+        {row.original.status}
+      </span>
+    </h5>
+  );
 };
 
 /* action column render */
-const ActionColumn = () => {
-  return <>
-      <Link to="#" className="action-icon">
-        {" "}
+const ActionColumn = ({ row, onEdit }) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const navigate = useNavigate();
+
+  const handleView = () => {
+    navigate(`/apps/ecommerce/order/details/${row.original.order_id}`);
+  };
+
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(row.original);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (window.confirm(`Are you sure you want to delete order #ORD${row.original.order_id}?`)) {
+      setIsDeleting(true);
+      try {
+        const response = await fetch(`https://ecomm.braventra.in/api/orders/delete/${row.original.order_id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+          }
+        });
+        
+        if (response.ok) {
+          alert('Order deleted successfully');
+          window.location.reload();
+        } else {
+          const error = await response.json();
+          alert(`Failed to delete order: ${error.message || 'Unknown error'}`);
+        }
+      } catch (error) {
+        console.error('Delete error:', error);
+        alert('Failed to delete order');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
+  return (
+    <div className="d-flex">
+      <Button
+        variant="outline-primary"
+        size="sm"
+        className="me-1 action-icon"
+        onClick={handleView}
+        title="View Order"
+      >
         <i className="mdi mdi-eye"></i>
-      </Link>
-      <Link to="#" className="action-icon">
-        {" "}
+      </Button>
+      <Button
+        variant="outline-success"
+        size="sm"
+        className="me-1 action-icon"
+        onClick={handleEdit}
+        title="Edit Order"
+      >
         <i className="mdi mdi-square-edit-outline"></i>
-      </Link>
-      <Link to="#" className="action-icon">
-        {" "}
-        <i className="mdi mdi-delete"></i>
-      </Link>
-    </>;
+      </Button>
+      {/* s */}
+    </div>
+  );
 };
 
-// get all columns
-const columns = [{
-  Header: "Order ID",
-  accessor: "order_id",
-  Cell: OrderColumn
-}, {
-  Header: "Products",
-  accessor: "product_img",
-  Cell: ProductsColumn
-}, {
-  Header: "Date",
-  accessor: "order_date",
-  Cell: OrderDateColumn
-}, {
-  Header: "Payment Status",
-  accessor: "payment_status",
-  Cell: PaymentStatusColumn
-}, {
-  Header: "Total",
-  accessor: "total"
-}, {
-  Header: "Payment Method",
-  accessor: "payment_method"
-}, {
-  Header: "Order Status",
-  accessor: "order_status",
-  Cell: StatusColumn
-}, {
-  Header: "Action",
-  accessor: "action",
-  Cell: ActionColumn
-}];
-
-// get pagelist to display
-const sizePerPageList = [{
-  text: "10",
-  value: 10
-}, {
-  text: "20",
-  value: 20
-}, {
-  text: "50",
-  value: 50
-}];
+const columns = [
+  {
+    Header: "Order ID",
+    accessor: "order_id",
+    Cell: OrderColumn
+  },
+  {
+    Header: "Customer Email",
+    accessor: "user_email"
+  },
+  {
+    Header: "Date",
+    accessor: "order_date",
+    Cell: ({ row }) => {
+      const date = new Date(row.original.order_date);
+      return (
+        <>
+          {date.toLocaleDateString('en-IN')}{" "}
+          <small className="text-muted">{date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</small>
+        </>
+      );
+    }
+  },
+  {
+    Header: "Source",
+    accessor: "order_source",
+    Cell: ({ row }) => {
+      const getSourceIcon = (source) => {
+        switch (source?.toLowerCase()) {
+          case 'website': return <i className="mdi mdi-web me-1"></i>;
+          case 'mobile': return <i className="mdi mdi-cellphone me-1"></i>;
+          case 'admin': return <i className="mdi mdi-account-cog me-1"></i>;
+          default: return <i className="mdi mdi-cart me-1"></i>;
+        }
+      };
+      
+      return (
+        <span>
+          {getSourceIcon(row.original.order_source)}
+          {row.original.order_source}
+        </span>
+      );
+    }
+  },
+  {
+    Header: "Amount",
+    accessor: "total_amount",
+    Cell: ({ row }) => `₹${parseFloat(row.original.total_amount || 0).toFixed(2)}`
+  },
+  {
+    Header: "Status",
+    accessor: "status",
+    Cell: StatusColumn
+  },
+  {
+    Header: "Actions",
+    accessor: "actions",
+    Cell: ActionColumn
+  }
+];
 
 // main component
 const Orders = () => {
-  const [orderList, setOrderList] = useState(orders);
+  const [orderList, setOrderList] = useState([]);
+  const [filteredOrders, setFilteredOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("All");
+  
+  // Edit modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [editError, setEditError] = useState(null);
+  const [editSuccess, setEditSuccess] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  
+  // Form state for editing
+  const [editFormData, setEditFormData] = useState({
+    status: '',
+    total_amount: 0
+  });
 
-  // change order status group
-  const changeOrderStatusGroup = OrderStatusGroup => {
-    let updatedData = [...orders];
-    //  filter
-    updatedData = OrderStatusGroup === "All" ? orders : [...orders].filter(o => o.payment_status?.includes(OrderStatusGroup));
-    setOrderList(updatedData);
+  // Fetch orders from backend
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('https://ecomm.braventra.in/api/orders', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.status === 200 && result.data) {
+        setOrderList(result.data);
+        setFilteredOrders(result.data);
+      } else {
+        throw new Error(result.error || 'Failed to fetch orders');
+      }
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+      setError(err.message || 'Failed to fetch orders. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
-  return <>
-      <PageTitle breadCrumbItems={[{
-      label: "Ecommerce",
-      path: "/apps/ecommerce/orders"
-    }, {
-      label: "Orders",
-      path: "/apps/ecommerce/orders",
-      active: true
-    }]} title={"Orders"} />
+
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  // Filter orders based on selected status
+  useEffect(() => {
+    if (statusFilter === "All") {
+      setFilteredOrders(orderList);
+    } else {
+      const filtered = orderList.filter(order => 
+        statusFilter === "All" || order.status === statusFilter
+      );
+      setFilteredOrders(filtered);
+    }
+  }, [statusFilter, orderList]);
+
+  const changeOrderStatusGroup = (status) => {
+    setStatusFilter(status);
+  };
+
+  const handleExport = async () => {
+    try {
+      // Create CSV content
+      const csvRows = [];
+      
+      // Add headers
+      const headers = ['Order ID', 'Customer Email', 'Order Date', 'Source', 'Amount', 'Status'];
+      csvRows.push(headers.join(','));
+      
+      // Add data rows
+      filteredOrders.forEach(order => {
+        const row = [
+          `ORD${order.order_id}`,
+          `"${order.user_email}"`,
+          new Date(order.order_date).toLocaleDateString('en-IN'),
+          order.order_source,
+          `₹${parseFloat(order.total_amount || 0).toFixed(2)}`,
+          order.status
+        ];
+        csvRows.push(row.join(','));
+      });
+      
+      // Create blob and download
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `orders_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      alert('Orders exported successfully!');
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Failed to export orders');
+    }
+  };
+
+  // Edit Order Functions
+  const handleEditOrder = (order) => {
+    setSelectedOrder(order);
+    setEditFormData({
+      status: order.status,
+      total_amount: order.total_amount
+    });
+    setShowEditModal(true);
+    setEditError(null);
+    setEditSuccess(null);
+  };
+
+  const handleCloseEditModal = () => {
+    setShowEditModal(false);
+    setSelectedOrder(null);
+  };
+
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleUpdateOrder = async () => {
+    if (!selectedOrder) return;
+
+    setEditingOrder(true);
+    setEditError(null);
+
+    try {
+      // Update order status
+      const updateData = {
+        status: editFormData.status
+      };
+
+      // First check if status update endpoint exists
+      const response = await fetch(`https://ecomm.braventra.in/api/orders/${selectedOrder.order_id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (response.ok) {
+        setEditSuccess('Order updated successfully!');
+        
+        // Refresh orders list after 1 second
+        setTimeout(() => {
+          fetchOrders();
+          handleCloseEditModal();
+        }, 1000);
+      } else {
+        // If status endpoint doesn't exist, try direct update
+        try {
+          const updateResponse = await fetch(`https://ecomm.braventra.in/api/orders/${selectedOrder.order_id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify(updateData)
+          });
+
+          if (updateResponse.ok) {
+            setEditSuccess('Order updated successfully!');
+            setTimeout(() => {
+              fetchOrders();
+              handleCloseEditModal();
+            }, 1000);
+          } else {
+            const error = await updateResponse.json();
+            setEditError(error.message || 'Failed to update order');
+          }
+        } catch (updateError) {
+          setEditError('Order update not supported. Please contact administrator.');
+        }
+      }
+    } catch (err) {
+      console.error('Error updating order:', err);
+      setEditError('Failed to update order. Please try again.');
+    } finally {
+      setEditingOrder(false);
+    }
+  };
+
+  return (
+    <>
+      <PageTitle 
+        breadCrumbItems={[
+          { label: "Ecommerce", path: "/apps/ecommerce/orders" },
+          { label: "Orders", path: "/apps/ecommerce/orders", active: true }
+        ]} 
+        title={"Orders Management"}
+      />
 
       <Row>
         <Col>
@@ -180,15 +399,37 @@ const Orders = () => {
                         <label htmlFor="status-select" className="me-2">
                           Status
                         </label>
-                        <select className="form-select" id="status-select" onChange={e => changeOrderStatusGroup(e.target.value)}>
+                        <select 
+                          className="form-select" 
+                          id="status-select" 
+                          value={statusFilter}
+                          onChange={e => changeOrderStatusGroup(e.target.value)}
+                        >
                           <option value="All">All</option>
-                          <option value="Paid">Paid</option>
-                          <option value="Authorization">
-                            Awaiting Authorization
-                          </option>
-                          <option value="Failed">Payment failed</option>
-                          <option value="Unpaid">Unpaid</option>
+                          <option value="Pending">Pending</option>
+                          <option value="Processing">Processing</option>
+                          <option value="Shipped">Shipped</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Cancelled">Cancelled</option>
                         </select>
+                      </div>
+                    </div>
+                    
+                    <div className="col-auto">
+                      <div className="d-flex align-items-center">
+                        <span className="me-2">Showing:</span>
+                        <Badge bg="primary" className="me-2">
+                          {filteredOrders.length} orders
+                        </Badge>
+                        <Button 
+                          variant="link" 
+                          className="p-0"
+                          onClick={fetchOrders}
+                          disabled={loading}
+                          title="Refresh"
+                        >
+                          <i className="mdi mdi-refresh"></i>
+                        </Button>
                       </div>
                     </div>
                   </form>
@@ -196,19 +437,190 @@ const Orders = () => {
 
                 <Col lg={4}>
                   <div className="text-lg-end mt-xl-0 mt-2">
-                    <Button className="btn btn-danger mb-2 me-2">
-                      <i className="mdi mdi-basket me-1"></i> Add New Order
+                    <Button 
+                      className="btn btn-light mb-2" 
+                      onClick={handleExport}
+                      disabled={loading || filteredOrders.length === 0}
+                    >
+                      <i className="mdi mdi-download me-1"></i>
+                      {loading ? 'Loading...' : 'Export'}
                     </Button>
-                    <Button className="btn btn-light mb-2">Export</Button>
                   </div>
                 </Col>
               </Row>
 
-              <Table columns={columns} data={orderList} isSearchable={true} pageSize={10} sizePerPageList={sizePerPageList} isSortable={true} pagination={true} isSelectable={true} theadClass="table-light" searchBoxClass="mb-2" />
+              {loading ? (
+                <div className="text-center py-5">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <p className="mt-2">Loading orders...</p>
+                </div>
+              ) : error ? (
+                <div className="alert alert-danger" role="alert">
+                  <i className="mdi mdi-alert-circle me-2"></i>
+                  {error}
+                  <Button 
+                    variant="link" 
+                    className="p-0 ms-2"
+                    onClick={fetchOrders}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : filteredOrders.length === 0 ? (
+                <div className="text-center py-5">
+                  <i className="mdi mdi-cart-off display-4 text-muted"></i>
+                  <h4 className="mt-3">No orders found</h4>
+                  <p className="text-muted">
+                    {statusFilter !== "All" 
+                      ? `No orders with status "${statusFilter}"`
+                      : "No orders available"}
+                  </p>
+                </div>
+              ) : (
+                <TableComponent 
+                  columns={columns.map(col => 
+                    col.accessor === 'actions' 
+                      ? { ...col, Cell: (props) => <ActionColumn {...props} onEdit={handleEditOrder} /> }
+                      : col
+                  )} 
+                  data={filteredOrders} 
+                  isSearchable={true} 
+                  pageSize={10} 
+                  sizePerPageList={[
+                    { text: "10", value: 10 },
+                    { text: "20", value: 20 },
+                    { text: "50", value: 50 }
+                  ]} 
+                  isSortable={true} 
+                  pagination={true} 
+                  isSelectable={true} 
+                  theadClass="table-light" 
+                  searchBoxClass="mb-2" 
+                />
+              )}
             </Card.Body>
           </Card>
         </Col>
       </Row>
-    </>;
+
+      {/* Edit Order Modal */}
+      <Modal show={showEditModal} onHide={handleCloseEditModal} centered>
+        <Modal.Header closeButton className="bg-light">
+          <Modal.Title>
+            <i className="mdi mdi-pencil me-2"></i>
+            Edit Order #{selectedOrder?.order_id}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {editError && (
+            <Alert variant="danger" onClose={() => setEditError(null)} dismissible className="mb-3">
+              <i className="mdi mdi-alert-circle me-2"></i>
+              {editError}
+            </Alert>
+          )}
+          
+          {editSuccess && (
+            <Alert variant="success" className="mb-3">
+              <i className="mdi mdi-check-circle me-2"></i>
+              {editSuccess}
+            </Alert>
+          )}
+
+          {selectedOrder && (
+            <Form>
+              <div className="mb-3">
+                <Form.Label>Customer Email</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={selectedOrder.user_email}
+                  readOnly
+                  disabled
+                />
+              </div>
+
+              <div className="mb-3">
+                <Form.Label>Order Date</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={new Date(selectedOrder.order_date).toLocaleString('en-IN')}
+                  readOnly
+                  disabled
+                />
+              </div>
+
+              <div className="mb-3">
+                <Form.Label>Order Source</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={selectedOrder.order_source}
+                  readOnly
+                  disabled
+                />
+              </div>
+
+              <div className="mb-3">
+                <Form.Label>Total Amount</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={`₹${parseFloat(selectedOrder.total_amount || 0).toFixed(2)}`}
+                  readOnly
+                  disabled
+                />
+              </div>
+
+              <div className="mb-3">
+                <Form.Label>Update Status *</Form.Label>
+                <Form.Select
+                  name="status"
+                  value={editFormData.status}
+                  onChange={handleEditFormChange}
+                  disabled={editingOrder}
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Shipped">Shipped</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </Form.Select>
+                <Form.Text className="text-muted">
+                  Current status: <Badge bg={
+                    selectedOrder.status === 'Completed' ? 'success' :
+                    selectedOrder.status === 'Processing' ? 'warning' :
+                    selectedOrder.status === 'Shipped' ? 'info' :
+                    selectedOrder.status === 'Cancelled' ? 'danger' : 'secondary'
+                  }>{selectedOrder.status}</Badge>
+                </Form.Text>
+              </div>
+            </Form>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="light" onClick={handleCloseEditModal} disabled={editingOrder}>
+            Cancel
+          </Button>
+          <Button 
+            variant="primary" 
+            onClick={handleUpdateOrder}
+            disabled={editingOrder || !editFormData.status}
+          >
+            {editingOrder ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                Updating...
+              </>
+            ) : (
+              <>
+                <i className="mdi mdi-content-save me-1"></i>
+                Update Order
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    </>
+  );
 };
+
 export default Orders;

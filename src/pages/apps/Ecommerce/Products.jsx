@@ -305,6 +305,13 @@ const Products = () => {
                         >
                             <i className="mdi mdi-upload me-1"></i> Bulk Upload (CSV)
                         </Button>
+                        <Button 
+                            variant="success" 
+                            href="edit-product"
+                            className="me-2"
+                        >
+                            <i className="mdi mdi-upload me-1"></i> Add Product
+                        </Button>
                         {/* <Button 
                             variant="outline-primary" 
                             onClick={downloadTemplate}

@@ -284,11 +284,11 @@ const ecommerceAppRoutes = {
     element: <Orders />,
     route: PrivateRoute
   }, {
-    path: "/apps/ecommerce/order/details",
-    name: "Order Details",
-    element: <OrderDetails />,
-    route: PrivateRoute
-  }, {
+  path: "/apps/ecommerce/order/details/:id",
+  name: "Order Details",
+  element: <OrderDetails />,
+  route: PrivateRoute
+}, {
     path: "/apps/ecommerce/sellers",
     name: "Sellers",
     element: <Sellers />,

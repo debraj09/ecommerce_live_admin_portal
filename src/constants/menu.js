@@ -39,12 +39,12 @@ const MENU_ITEMS = [{
   // }, 
   
   
-  {
-    key: "ecommerce-edit-product",
-    label: "Add Product",
-    url: "/apps/ecommerce/edit-product",
-    parentKey: "apps-ecommerce"
-  },
+  // {
+  //   key: "ecommerce-edit-product",
+  //   label: "Add Product",
+  //   url: "/apps/ecommerce/edit-product",
+  //   parentKey: "apps-ecommerce"
+  // },
   {
     key: "ecommerce-banner",
     label: "Banner",
@@ -75,6 +75,12 @@ const MENU_ITEMS = [{
     key: "ecommerce-customers",
     label: "Customers",
     url: "/apps/ecommerce/customers",
+    parentKey: "apps-ecommerce"
+  },
+  {
+    key: "ecommerce-orders",
+    label: "Orders",
+    url: "/apps/ecommerce/Orders",
     parentKey: "apps-ecommerce"
   },
 //   }, {
