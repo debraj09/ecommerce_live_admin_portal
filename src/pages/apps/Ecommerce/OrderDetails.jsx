@@ -265,31 +265,42 @@ const OrderDetails = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching order details for ID:', id);
       
       const response = await fetch(`https://ecomm.braventra.in/api/orders/${id}`, {
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
         }
       });
       
+      console.log('Order details response status:', response.status);
+      
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error:', errorData);
+        
         if (response.status === 404) {
           throw new Error('Order not found');
+        } else if (response.status === 500) {
+          throw new Error(`Server error: ${errorData.error || errorData.message || 'Internal server error'}`);
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const result = await response.json();
+      console.log('Order details result:', result);
       
       if (result.status === 200 && result.data) {
         setOrder(result.data);
         setUpdateStatus(result.data.status);
+        console.log('Order data loaded successfully');
       } else {
-        throw new Error(result.error || 'Failed to fetch order details');
+        throw new Error(result.message || result.error || 'Failed to fetch order details');
       }
     } catch (err) {
       console.error('Error fetching order details:', err);
-      setError(err.message || 'Failed to fetch order details');
+      setError(err.message || 'Failed to fetch order details. Please check the server logs.');
     } finally {
       setLoading(false);
     }
@@ -299,6 +310,19 @@ const OrderDetails = () => {
     if (id) {
       fetchOrderDetails();
     }
+    
+    // Suppress React key warnings temporarily
+    const originalError = console.error;
+    console.error = (...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('A props object containing a "key" prop')) {
+        return;
+      }
+      originalError.apply(console, args);
+    };
+    
+    return () => {
+      console.error = originalError;
+    };
   }, [id]);
 
   const handlePrintInvoice = () => {
@@ -432,36 +456,27 @@ const OrderDetails = () => {
     if (!order || !updateStatus) return;
 
     setUpdating(true);
+    console.log('Updating order status:', order.order_id, 'to', updateStatus);
+    
     try {
       const response = await fetch(`https://ecomm.braventra.in/api/orders/${order.order_id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
         },
         body: JSON.stringify({ status: updateStatus })
       });
+
+      const result = await response.json();
+      console.log('Update status response:', result);
 
       if (response.ok) {
         setActionSuccess('Order status updated successfully!');
         setShowUpdateModal(false);
         fetchOrderDetails(); // Refresh order details
       } else {
-        // Try alternative endpoint
-        const altResponse = await fetch(`https://ecomm.braventra.in/api/orders/${order.order_id}/status`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ status: updateStatus })
-        });
-
-        if (altResponse.ok) {
-          setActionSuccess('Order status updated successfully!');
-          setShowUpdateModal(false);
-          fetchOrderDetails();
-        } else {
-          throw new Error('Failed to update order status');
-        }
+        throw new Error(result.error || result.message || 'Failed to update order status');
       }
     } catch (err) {
       console.error('Error updating order status:', err);
@@ -476,34 +491,26 @@ const OrderDetails = () => {
     
     if (window.confirm(`Are you sure you want to cancel order #${order.order_id}?`)) {
       setUpdating(true);
+      console.log('Cancelling order:', order.order_id);
+      
       try {
         const response = await fetch(`https://ecomm.braventra.in/api/orders/${order.order_id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
           },
           body: JSON.stringify({ status: 'Cancelled' })
         });
+
+        const result = await response.json();
+        console.log('Cancel order response:', result);
 
         if (response.ok) {
           setActionSuccess('Order cancelled successfully!');
           fetchOrderDetails(); // Refresh order details
         } else {
-          // Try alternative endpoint
-          const altResponse = await fetch(`https://ecomm.braventra.in/api/orders/${order.order_id}/status`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ status: 'Cancelled' })
-          });
-
-          if (altResponse.ok) {
-            setActionSuccess('Order cancelled successfully!');
-            fetchOrderDetails();
-          } else {
-            throw new Error('Failed to cancel order');
-          }
+          throw new Error(result.error || result.message || 'Failed to cancel order');
         }
       } catch (err) {
         console.error('Error cancelling order:', err);
@@ -519,34 +526,26 @@ const OrderDetails = () => {
     
     if (window.confirm(`Mark order #${order.order_id} as completed?`)) {
       setUpdating(true);
+      console.log('Marking order as completed:', order.order_id);
+      
       try {
         const response = await fetch(`https://ecomm.braventra.in/api/orders/${order.order_id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
           },
           body: JSON.stringify({ status: 'Completed' })
         });
+
+        const result = await response.json();
+        console.log('Mark completed response:', result);
 
         if (response.ok) {
           setActionSuccess('Order marked as completed!');
           fetchOrderDetails();
         } else {
-          // Try alternative endpoint
-          const altResponse = await fetch(`https://ecomm.braventra.in/api/orders/${order.order_id}/status`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ status: 'Completed' })
-          });
-
-          if (altResponse.ok) {
-            setActionSuccess('Order marked as completed!');
-            fetchOrderDetails();
-          } else {
-            throw new Error('Failed to update order');
-          }
+          throw new Error(result.error || result.message || 'Failed to update order');
         }
       } catch (err) {
         console.error('Error marking order as completed:', err);
