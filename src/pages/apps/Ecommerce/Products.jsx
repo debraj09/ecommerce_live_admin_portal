@@ -307,7 +307,7 @@ const Products = () => {
                         </Button>
                         <Button 
                             variant="success" 
-                            href="edit-product"
+                            href="/apps/ecommerce/edit-product"
                             className="me-2"
                         >
                             <i className="mdi mdi-upload me-1"></i> Add Product
